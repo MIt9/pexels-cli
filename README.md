@@ -4,23 +4,24 @@
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![Built with uv](https://img.shields.io/badge/built%20with-uv-purple.svg)](https://github.com/astral-sh/uv)
 
-A modern, high-performance command-line tool for [Pexels](https://www.pexels.com/api/), designed for **Humans** (Rich visual UI) and **AI Agents** (Machine-readable `--json` output).
+A modern, high-performance command-line tool for [Pexels](https://www.pexels.com/api/), designed for **Humans** (Rich visual UI) and **AI Agents / Classifiers** (Machine-readable `--json` & `--state` JSONL output).
 
 ---
 
 ## ⚡ Key Features
 
+* 🤖 **Classifier-Ready JSONL Stream (`--state`)**: Stream compact candidate objects with generated `state` strings for non-generative decision models (Laya / System 1 classifiers):
+  ```bash
+  px videos --queries "black friday shopping,christmas shopping,checkout cart" \
+    --per-page 8 --state --dedupe > candidates.jsonl
+  ```
+* 🎯 **Multi-Query Batch Execution (`--queries` & `--queries-file`)**: Execute multiple search queries in a single CLI call.
+* 🧹 **Deduplication (`--dedupe`)**: Automatically deduplicate candidates by ID across multiple search queries.
+* 🔍 **Field Filtering (`--fields`)**: Keep only specified keys (e.g. `--fields id,url,photographer,width,height`) to reduce payload noise.
 * 🖼️ **Dedicated Photo Search (`px search` / `px photos`)**: Search stock photos with color hex codes, orientation, resolution, and localization filters.
 * 🎥 **Dedicated Video Search (`px videos`)**: Search HD & 4K stock video footage with aspect ratio and quality filtering.
-* 🤖 **Dedicated AI Smart Search**:
-  * `px smart-photo`: AI natural language photo search (color palette inference, composition tags).
-  * `px smart-video`: AI natural language video search (motion, resolution, and framing tags).
 * 🧠 **Multi-Provider AI Engine**: Supports **Google Gemini** (`gemini-2.5-flash`), **OpenAI** (`gpt-4o-mini`), and **Ollama** (Local LLM `llama3.2`).
-* 🤖 **AI-Agent Friendly (`--json`)**: Every command supports `--json` or global `PX_OUTPUT_FORMAT=json` for clean, zero-ANSI JSON output designed for AI subagents, shell automation, and pipelines.
 * ⚡ **High-Speed Downloader**: Async stream downloader with rich progress bars (`px download`).
-* 🎨 **Enhanced Prompting & Curation**:
-  * `px ai enhance`: Expands search concepts into stock photography keywords & aesthetic styles.
-  * `px ai curate`: Generates structured stock media shot lists based on project briefs.
 
 ---
 
@@ -40,61 +41,55 @@ pipx install pexels-ai-cli
 
 ---
 
-## 🔑 Quick Setup & Configuration
+## 🤖 Classifier Pipeline Integration (Laya / Decision Models)
 
-### 1. Set Pexels API Key
-Get your free API key at [Pexels API Portal](https://www.pexels.com/api/).
+Pipe candidate streams directly into typed-decision classification models:
+
 ```bash
-px config set-pexels-key YOUR_PEXELS_API_KEY
+px videos --queries "black friday shopping,online shopping,checkout cart" \
+  --per-page 8 --state --dedupe > candidates.jsonl
 ```
 
-### 2. Set AI Key (Optional)
-```bash
-# Set Gemini Key (Default Provider)
-px config set-ai-key YOUR_GEMINI_API_KEY --provider gemini
-
-# Or OpenAI
-px config set-ai-key YOUR_OPENAI_API_KEY --provider openai
-
-# Or Ollama (Local LLM, no API key needed)
-px config set-ai-key http://localhost:11434 --provider ollama --model llama3.2
+### Output JSONL format (`candidates.jsonl`):
+```json
+{"id": 5890229, "type": "video", "query": "black friday shopping", "state": "a man shopping on black friday (photographer: Pavel Danilyuk)", "url": "https://www.pexels.com/video/a-man-shopping-on-black-friday-5890229/", "duration": 10, "width": 2160, "height": 3840}
 ```
 
 ---
 
 ## 📖 Usage Examples
 
-### Photo Search (Standard & AI)
+### 1. Photo Search (Standard & AI)
 ```bash
 # Standard Photo Search
 px search "cyberpunk city" --color blue --orientation landscape
+
+# Multi-query Photo Search with Field Filtering
+px search --queries "mountains,forest,sunset" --fields id,url,photographer --json
 
 # Smart AI Photo Search
 px smart-photo "Dark moody tech background with subtle neon blue accents"
 ```
 
-### Video Search (Standard & AI)
+### 2. Video Search (Standard & AI)
 ```bash
 # Standard Video Search
 px videos "drone ocean waves" --orientation landscape
+
+# Multi-query Video Search with State Generation
+px videos --queries "city traffic,highway drone,night car" --state --dedupe
 
 # Smart AI Video Search
 px smart-video "Slow motion rainfall on city pavement"
 ```
 
-### Media Downloading
+### 3. Media Downloading
 ```bash
 # Download photo by ID
 px download 12377231 --output ./photo.jpg
 
 # Download 4K video by ID
 px download 25460961 --type video --output ./clip.mp4
-```
-
-### Scripting for AI Subagents (`--json`)
-```bash
-px search "mountains" --json
-px smart-photo "cozy autumn coffee" --json
 ```
 
 ---

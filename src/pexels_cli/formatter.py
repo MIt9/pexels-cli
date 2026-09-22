@@ -1,4 +1,4 @@
-"""Formatter module for human-friendly (rich) and machine-friendly (json) CLI output."""
+"""Formatter module for human-friendly (rich) and machine-friendly (json/jsonl) CLI output."""
 
 import json
 import sys
@@ -15,7 +15,7 @@ error_console = Console(stderr=True)
 
 
 class OutputFormatter:
-    """Output formatter supporting rich terminal presentation and AI agent JSON mode."""
+    """Output formatter supporting rich terminal presentation and AI agent JSON/JSONL mode."""
 
     def __init__(self, json_mode: bool = False):
         self.json_mode = json_mode
@@ -44,6 +44,18 @@ class OutputFormatter:
                 console.print(Syntax(json_str, "json", theme="monokai", word_wrap=True))
             else:
                 console.print(data)
+
+    def print_jsonl(self, items: List[Any]) -> None:
+        """Print list of objects as JSON Lines (one JSON object per line)."""
+        for item in items:
+            if isinstance(item, BaseModel):
+                item_dict = item.model_dump()
+            elif hasattr(item, "to_dict"):
+                item_dict = item.to_dict()
+            else:
+                item_dict = item
+            sys.stdout.write(json.dumps(item_dict, ensure_ascii=False) + "\n")
+        sys.stdout.flush()
 
     def print_photos_table(self, photos: List[Dict[str, Any]], title: str = "Pexels Photos") -> None:
         """Print a rich table of photos."""

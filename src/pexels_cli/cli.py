@@ -2,7 +2,7 @@
 
 import asyncio
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, List, Optional
 import typer
 from rich.console import Console
 
@@ -22,6 +22,11 @@ from pexels_cli.ai.smart_search import (
     build_smart_video_params,
 )
 from pexels_cli.ai.enhancer import enhance_prompt, curate_project
+from pexels_cli.state_builder import (
+    apply_fields_filter,
+    build_candidate_state_item,
+    deduplicate_candidates,
+)
 
 
 APP_HELP_TEXT = """
@@ -31,7 +36,7 @@ APP_HELP_TEXT = """
 
 Designed with a **Dual Interface Architecture**:
 - 🎨 **For Humans**: Beautiful, interactive terminal tables, colorized syntax, and progress bars powered by `rich`.
-- 🤖 **For AI Agents & Automation**: Clean, deterministic, machine-readable `--json` output for subagents, shell pipelines, and `jq`.
+- 🤖 **For AI Agents & Automation**: Clean, deterministic, machine-readable `--json` & `--state` JSONL output for subagents, typed-decision classifiers (Laya), shell pipelines, and `jq`.
 
 ---
 
@@ -43,12 +48,30 @@ Designed with a **Dual Interface Architecture**:
 2. **Dedicated Video Search & AI Smart Video Search**
    - Standard video search: `px videos "waterfall"`
    - AI natural language video search: `px smart-video "Drone footage over ocean cliffs"`
-3. **Multi-Provider AI Engine**
+3. **Classifier-Ready JSONL Stream (`--state` & `--fields`)**
+   - Stream compact candidate objects with generated `state` strings for non-generative decision models (Laya):
+     `px videos --queries "black friday,online shopping" --state --dedupe > candidates.jsonl`
+   - Filter JSON fields: `px search "nature" --fields id,url,photographer --json`
+4. **Multi-Provider AI Engine**
    Seamless integration with **Google Gemini**, **OpenAI**, or local **Ollama** models.
-4. **High-Performance Downloader**
+5. **High-Performance Downloader**
    Directly download media by ID or URL with streaming progress indicators.
-5. **Prompt Enhancer & Curation Assistant**
-   Brainstorm creative visual concepts or generate full shot lists for project briefs.
+
+---
+
+## 🤖 Classifier Pipeline Example (Laya / System 1 Models)
+
+Pipe multi-query candidate streams directly into typed-decision classification pipelines:
+
+```bash
+px videos --queries "black friday shopping,christmas online shopping,checkout cart" \\
+  --per-page 8 --state --dedupe > candidates.jsonl
+```
+
+Output format per candidate (`candidates.jsonl`):
+```json
+{"id": 5890229, "type": "video", "query": "black friday shopping", "state": "a man shopping on black friday (photographer: Pavel Danilyuk)", "url": "https://www.pexels.com/video/.../", "duration": 10, "width": 2160, "height": 3840}
+```
 
 ---
 
@@ -59,27 +82,6 @@ Designed with a **Dual Interface Architecture**:
 - `OPENAI_API_KEY`: OpenAI API Key.
 - `OLLAMA_HOST`: Host URL for local Ollama server (default: `http://localhost:11434`).
 - `PX_OUTPUT_FORMAT`: Force default output mode (`rich` or `json`).
-
----
-
-## 💡 Quick Examples
-
-```bash
-# 1. Save your API key
-px config set-pexels-key YOUR_PEXELS_KEY
-
-# 2. Dedicated Photo Search (Standard or AI)
-px search "cyberpunk" --orientation landscape --color blue
-px smart-photo "Dark moody tech background with neon accents"
-
-# 3. Dedicated Video Search (Standard or AI)
-px videos "nature waterfall" --orientation landscape
-px smart-video "Slow motion rainfall on city pavement"
-
-# 4. Download media directly by ID
-px download 12377231 --output ./hero.jpg
-px download 25460961 --type video --output ./clip.mp4
-```
 """
 
 app = typer.Typer(
@@ -161,12 +163,33 @@ def version_cmd(
         console.print(f"✨ [bold cyan]pexels-cli[/bold cyan] v[bold green]{__version__}[/bold green] (Python {info['python_version']})")
 
 
-
 def get_formatter(json_flag: bool) -> OutputFormatter:
     """Helper to determine output format."""
     cfg = load_config()
     is_json = json_flag or cfg.default_output == "json"
     return OutputFormatter(json_mode=is_json)
+
+
+def resolve_query_list(
+    query: Optional[str],
+    queries: Optional[str],
+    queries_file: Optional[Path],
+) -> List[str]:
+    """Helper to resolve query string, comma-separated queries, or queries file into a list of queries."""
+    query_list = []
+    if queries_file:
+        if not queries_file.exists():
+            raise PexelsClientError(f"Queries file not found: {queries_file}")
+        with open(queries_file, "r", encoding="utf-8") as f:
+            query_list = [line.strip() for line in f if line.strip()]
+    elif queries:
+        query_list = [q.strip() for q in queries.split(",") if q.strip()]
+    elif query:
+        query_list = [query.strip()]
+
+    if not query_list:
+        raise PexelsClientError("Please specify a search query argument, --queries, or --queries-file.")
+    return query_list
 
 
 # ==========================================
@@ -283,9 +306,19 @@ def config_path():
 @app.command("search")
 @app.command("photos")
 def search_photos_cmd(
-    query: str = typer.Argument(
-        ...,
+    query: Optional[str] = typer.Argument(
+        None,
         help="Search query term for photos (e.g., 'mountains', 'cyberpunk city')",
+    ),
+    queries: Optional[str] = typer.Option(
+        None,
+        "--queries",
+        help="Comma-separated list of queries for batch execution (e.g. 'mountains,forest,ocean')",
+    ),
+    queries_file: Optional[Path] = typer.Option(
+        None,
+        "--queries-file",
+        help="Path to text file containing one search query per line",
     ),
     orientation: Optional[str] = typer.Option(
         None,
@@ -313,42 +346,103 @@ def search_photos_cmd(
     ),
     page: int = typer.Option(1, "--page", "-p", help="Page number"),
     per_page: int = typer.Option(15, "--per-page", "-n", help="Results per page (1-80)"),
+    fields: Optional[str] = typer.Option(
+        None,
+        "--fields",
+        help="Comma-separated list of keys to keep in JSON output (e.g. `id,url,photographer,width,height`)",
+    ),
+    state: bool = typer.Option(
+        False,
+        "--state",
+        help="Output compact candidate objects in JSONL format with generated candidate 'state' for decision classifiers (Laya)",
+    ),
+    dedupe: Optional[str] = typer.Option(
+        None,
+        "--dedupe",
+        help="Deduplicate candidates by ID across queries. Modes: 'keep-first' (default) or 'keep-all-queries'",
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output machine-readable JSON"),
 ):
     """
     🖼️ **Search Photos strictly (Pexels Stock Photos).**
 
-    Dedicated photo search tool with color matching, aspect ratio, and resolution options.
+    Supports single queries, multi-queries (`--queries`), field filtering (`--fields`), and classifier-ready JSONL (`--state`).
 
     ### Examples:
     ```bash
     px search "cyberpunk city" --color blue
-    px photos "landscape mountains" --orientation landscape --per-page 10
+    px search --queries "mountains,forest,sunset" --state --dedupe > candidates.jsonl
+    px photos "landscape" --fields id,url,photographer --json
     ```
     """
     cfg = load_config()
-    fmt = get_formatter(json_output)
+    is_json = json_output or state or bool(fields) or (cfg.default_output == "json")
+    fmt = OutputFormatter(json_mode=is_json)
     client = PexelsClient(cfg.pexels_api_key or "")
 
     try:
-        res = asyncio.run(
-            client.search_photos(
-                query=query,
-                orientation=orientation,
-                size=size,
-                color=color,
-                locale=locale,
-                page=page,
-                per_page=per_page,
-            )
-        )
-        if fmt.json_mode:
-            fmt.print_data(res)
+        query_list = resolve_query_list(query, queries, queries_file)
+        fields_list = [f.strip() for f in fields.split(",") if f.strip()] if fields else []
+
+        if state:
+            all_candidates = []
+            for q in query_list:
+                res = asyncio.run(
+                    client.search_photos(
+                        query=q,
+                        orientation=orientation,
+                        size=size,
+                        color=color,
+                        locale=locale,
+                        page=page,
+                        per_page=per_page,
+                    )
+                )
+                for item in res.get("photos", []):
+                    cand = build_candidate_state_item(item, media_type="photo", query=q)
+                    all_candidates.append(cand)
+
+            if dedupe is not None:
+                dedupe_mode = "keep-all-queries" if dedupe == "keep-all-queries" else "keep-first"
+                all_candidates = deduplicate_candidates(all_candidates, mode=dedupe_mode)
+
+            if fields_list:
+                all_candidates = apply_fields_filter(all_candidates, fields_list)
+
+            fmt.print_jsonl(all_candidates)
+
         else:
-            fmt.print_photos_table(
-                res.get("photos", []),
-                title=f"Photos matching '{query}' (Total: {res.get('total_results', 0)})"
-            )
+            # Standard output mode
+            all_results = []
+            for q in query_list:
+                res = asyncio.run(
+                    client.search_photos(
+                        query=q,
+                        orientation=orientation,
+                        size=size,
+                        color=color,
+                        locale=locale,
+                        page=page,
+                        per_page=per_page,
+                    )
+                )
+                if fields_list:
+                    res = apply_fields_filter(res, fields_list)
+                all_results.append((q, res))
+
+            if fmt.json_mode:
+                if len(all_results) == 1:
+                    fmt.print_data(all_results[0][1])
+                else:
+                    fmt.print_data([r[1] for r in all_results])
+            else:
+                for q, res in all_results:
+                    photos = res.get("photos", [])
+                    fmt.print_photos_table(
+                        photos,
+                        title=f"Photos matching '{q}' (Total: {res.get('total_results', 0)})"
+                    )
+
     except PexelsClientError as e:
         fmt.print_error(str(e))
         raise typer.Exit(code=1)
@@ -402,43 +496,119 @@ def get_photo_cmd(
 
 @app.command("videos")
 def search_videos_cmd(
-    query: str = typer.Argument(..., help="Search query term for videos (e.g. 'waterfall', 'city traffic')"),
+    query: Optional[str] = typer.Argument(
+        None,
+        help="Search query term for videos (e.g. 'waterfall', 'city traffic')",
+    ),
+    queries: Optional[str] = typer.Option(
+        None,
+        "--queries",
+        help="Comma-separated list of queries for batch execution (e.g. 'waterfall,ocean waves,drone footage')",
+    ),
+    queries_file: Optional[Path] = typer.Option(
+        None,
+        "--queries-file",
+        help="Path to text file containing one search query per line",
+    ),
     orientation: Optional[str] = typer.Option(None, "--orientation", "-o", help="Filter orientation: `landscape`, `portrait`, `square`"),
     size: Optional[str] = typer.Option(None, "--size", "-s", help="Filter minimum size: `large` (4K/HD), `medium`, `small`"),
     locale: Optional[str] = typer.Option(None, "--locale", "-l", help="Locale string"),
     page: int = typer.Option(1, "--page", "-p", help="Page number"),
     per_page: int = typer.Option(15, "--per-page", "-n", help="Results per page (1-80)"),
+    fields: Optional[str] = typer.Option(
+        None,
+        "--fields",
+        help="Comma-separated list of keys to keep in JSON output (e.g. `id,url,duration,width,height`)",
+    ),
+    state: bool = typer.Option(
+        False,
+        "--state",
+        help="Output compact candidate objects in JSONL format with generated candidate 'state' for decision classifiers (Laya)",
+    ),
+    dedupe: Optional[str] = typer.Option(
+        None,
+        "--dedupe",
+        help="Deduplicate candidates by ID across queries. Modes: 'keep-first' (default) or 'keep-all-queries'",
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output machine-readable JSON"),
 ):
     """
     🎥 **Search Videos strictly (HD and 4K Pexels Stock Videos).**
 
-    Dedicated video search tool with aspect ratio and resolution quality filtering.
+    Supports single queries, multi-queries (`--queries`), field filtering (`--fields`), and classifier-ready JSONL (`--state`).
 
     ### Examples:
     ```bash
     px videos "drone sunset ocean" --orientation landscape
-    px videos "city traffic" --per-page 10
+    px videos --queries "black friday shopping,christmas shopping,checkout cart" --per-page 8 --state --dedupe > candidates.jsonl
+    px videos "city traffic" --fields id,url,duration,width,height --json
     ```
     """
     cfg = load_config()
-    fmt = get_formatter(json_output)
+    is_json = json_output or state or bool(fields) or (cfg.default_output == "json")
+    fmt = OutputFormatter(json_mode=is_json)
+    client = PexelsClient(cfg.pexels_api_key or "")
+
     try:
-        client = PexelsClient(cfg.pexels_api_key or "")
-        res = asyncio.run(
-            client.search_videos(
-                query=query,
-                orientation=orientation,
-                size=size,
-                locale=locale,
-                page=page,
-                per_page=per_page,
-            )
-        )
-        if fmt.json_mode:
-            fmt.print_data(res)
+        query_list = resolve_query_list(query, queries, queries_file)
+        fields_list = [f.strip() for f in fields.split(",") if f.strip()] if fields else []
+
+        if state:
+            all_candidates = []
+            for q in query_list:
+                res = asyncio.run(
+                    client.search_videos(
+                        query=q,
+                        orientation=orientation,
+                        size=size,
+                        locale=locale,
+                        page=page,
+                        per_page=per_page,
+                    )
+                )
+                for item in res.get("videos", []):
+                    cand = build_candidate_state_item(item, media_type="video", query=q)
+                    all_candidates.append(cand)
+
+            if dedupe is not None:
+                dedupe_mode = "keep-all-queries" if dedupe == "keep-all-queries" else "keep-first"
+                all_candidates = deduplicate_candidates(all_candidates, mode=dedupe_mode)
+
+            if fields_list:
+                all_candidates = apply_fields_filter(all_candidates, fields_list)
+
+            fmt.print_jsonl(all_candidates)
+
         else:
-            fmt.print_videos_table(res.get("videos", []), title=f"Videos matching '{query}'")
+            all_results = []
+            for q in query_list:
+                res = asyncio.run(
+                    client.search_videos(
+                        query=q,
+                        orientation=orientation,
+                        size=size,
+                        locale=locale,
+                        page=page,
+                        per_page=per_page,
+                    )
+                )
+                if fields_list:
+                    res = apply_fields_filter(res, fields_list)
+                all_results.append((q, res))
+
+            if fmt.json_mode:
+                if len(all_results) == 1:
+                    fmt.print_data(all_results[0][1])
+                else:
+                    fmt.print_data([r[1] for r in all_results])
+            else:
+                for q, res in all_results:
+                    videos = res.get("videos", [])
+                    fmt.print_videos_table(
+                        videos,
+                        title=f"Videos matching '{q}'"
+                    )
+
     except PexelsClientError as e:
         fmt.print_error(str(e))
         raise typer.Exit(code=1)
@@ -581,13 +751,6 @@ def smart_photo_cmd(
 ):
     """
     🖼️🤖 **Smart AI Photo Search.**
-
-    Translates natural language prompts into optimized photo search queries, color palettes, and orientation filters.
-
-    ### Example:
-    ```bash
-    px smart-photo "Dark moody tech background with subtle neon blue highlights"
-    ```
     """
     cfg = load_config()
     fmt = get_formatter(json_output)
@@ -647,13 +810,6 @@ def smart_video_cmd(
 ):
     """
     🎥🤖 **Smart AI Video Search.**
-
-    Translates natural language prompts into optimized HD/4K video search queries and orientation filters.
-
-    ### Example:
-    ```bash
-    px smart-video "Drone footage hovering over mountain peaks at sunset"
-    ```
     """
     cfg = load_config()
     fmt = get_formatter(json_output)
