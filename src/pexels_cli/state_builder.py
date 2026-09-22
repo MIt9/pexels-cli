@@ -47,6 +47,7 @@ def build_candidate_state_item(
       "id": int,
       "type": "video" | "photo",
       "query": str | List[str],
+      "photographer": str,
       "state": str,
       "url": str,
       "width": int,
@@ -61,6 +62,8 @@ def build_candidate_state_item(
     photographer = item.get("photographer", "")
     if not photographer and isinstance(item.get("user"), dict):
         photographer = item.get("user", {}).get("name", "")
+    if not photographer:
+        photographer = ""
     
     # Tags extraction
     raw_tags = item.get("tags", [])
@@ -83,8 +86,6 @@ def build_candidate_state_item(
 
     if tag_list:
         state_parts.append(f"(tags: {', '.join(tag_list)})")
-    elif photographer:
-        state_parts.append(f"(photographer: {photographer})")
 
     state_str = " ".join(state_parts)
 
@@ -92,6 +93,7 @@ def build_candidate_state_item(
         "id": item.get("id"),
         "type": media_type,
         "query": query,
+        "photographer": photographer,
         "state": state_str,
         "url": url,
     }

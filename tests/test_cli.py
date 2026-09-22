@@ -39,10 +39,21 @@ def test_build_candidate_state_item():
     assert cand["id"] == 5890229
     assert cand["type"] == "video"
     assert cand["query"] == "black friday shopping"
-    assert cand["state"] == "a man shopping on black friday (photographer: Pavel Danilyuk)"
+    assert cand["photographer"] == "Pavel Danilyuk"
+    assert cand["state"] == "a man shopping on black friday"
     assert cand["duration"] == 10
     assert cand["width"] == 2160
     assert cand["height"] == 3840
+
+    item_with_tags = {
+        "id": 5890229,
+        "url": "https://www.pexels.com/video/a-man-shopping-on-black-friday-5890229/",
+        "photographer": "Pavel Danilyuk",
+        "tags": ["retail", "sale"],
+    }
+    cand_tags = build_candidate_state_item(item_with_tags, media_type="video", query="black friday shopping")
+    assert cand_tags["photographer"] == "Pavel Danilyuk"
+    assert cand_tags["state"] == "a man shopping on black friday (tags: retail, sale)"
 
 
 def test_deduplicate_candidates():
@@ -63,15 +74,15 @@ def test_deduplicate_candidates():
 def test_version_command():
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert "pexels-cli version 0.2.3" in result.output
+    assert "pexels-cli version 0.2.4" in result.output
 
     res_cmd = runner.invoke(app, ["version"])
     assert res_cmd.exit_code == 0
-    assert "pexels-cli v0.2.3" in res_cmd.output
+    assert "pexels-cli v0.2.4" in res_cmd.output
 
     res_json = runner.invoke(app, ["version", "--json"])
     assert res_json.exit_code == 0
-    assert '"version": "0.2.3"' in res_json.output
+    assert '"version": "0.2.4"' in res_json.output
 
 
 def test_sanitize_response():

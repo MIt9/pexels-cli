@@ -52,7 +52,7 @@ px videos --queries "black friday shopping,online shopping,checkout cart" \
 
 ### Output JSONL format (`candidates.jsonl`):
 ```json
-{"id": 5890229, "type": "video", "query": "black friday shopping", "state": "a man shopping on black friday (photographer: Pavel Danilyuk)", "url": "https://www.pexels.com/video/a-man-shopping-on-black-friday-5890229/", "duration": 10, "width": 2160, "height": 3840}
+{"id": 5890229, "type": "video", "query": "black friday shopping", "photographer": "Pavel Danilyuk", "state": "a man shopping on black friday", "url": "https://www.pexels.com/video/a-man-shopping-on-black-friday-5890229/", "duration": 10, "width": 2160, "height": 3840}
 ```
 
 ---
