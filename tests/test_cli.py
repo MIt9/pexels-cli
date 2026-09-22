@@ -63,12 +63,30 @@ def test_deduplicate_candidates():
 def test_version_command():
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert "pexels-cli version 0.2.1" in result.output
+    assert "pexels-cli version 0.2.2" in result.output
 
     res_cmd = runner.invoke(app, ["version"])
     assert res_cmd.exit_code == 0
-    assert "pexels-cli v0.2.1" in res_cmd.output
+    assert "pexels-cli v0.2.2" in res_cmd.output
 
     res_json = runner.invoke(app, ["version", "--json"])
     assert res_json.exit_code == 0
-    assert '"version": "0.2.1"' in res_json.output
+    assert '"version": "0.2.2"' in res_json.output
+
+
+def test_sanitize_response():
+    from pexels_cli.client import _sanitize_response
+
+    payload = {
+        "page": 1,
+        "next_page": "https://api.pexels.com/v1/v1/search?page=2&per_page=15",
+        "prev_page": "https://api.pexels.com/v1/v1/search?page=1&per_page=15",
+        "nested": {
+            "next_page": "https://api.pexels.com/v1/v1/v1/photos"
+        }
+    }
+    sanitized = _sanitize_response(payload)
+    assert sanitized["next_page"] == "https://api.pexels.com/v1/search?page=2&per_page=15"
+    assert sanitized["prev_page"] == "https://api.pexels.com/v1/search?page=1&per_page=15"
+    assert sanitized["nested"]["next_page"] == "https://api.pexels.com/v1/photos"
+

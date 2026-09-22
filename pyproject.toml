@@ -1,6 +1,6 @@
 [project]
 name = "pexels-ai-cli"
-version = "0.2.1"
+version = "0.2.2"
 description = "Next-Gen AI-Powered Command Line Interface for Pexels - Built for Humans & AI Agents"
 readme = "README.md"
 license = { text = "MIT" }

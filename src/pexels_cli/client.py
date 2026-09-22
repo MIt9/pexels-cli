@@ -16,6 +16,23 @@ class PexelsClientError(Exception):
     pass
 
 
+def _sanitize_response(data: Any) -> Any:
+    """Recursively sanitize Pexels API response data to fix duplicate v1/ in pagination URLs."""
+    if isinstance(data, dict):
+        sanitized = {}
+        for k, v in data.items():
+            if isinstance(v, str) and k in ("next_page", "prev_page"):
+                while "api.pexels.com/v1/v1/" in v:
+                    v = v.replace("api.pexels.com/v1/v1/", "api.pexels.com/v1/")
+                sanitized[k] = v
+            else:
+                sanitized[k] = _sanitize_response(v)
+        return sanitized
+    elif isinstance(data, list):
+        return [_sanitize_response(item) for item in data]
+    return data
+
+
 class PexelsClient:
     """Async & Sync Pexels API Client."""
 
@@ -42,7 +59,7 @@ class PexelsClient:
                     raise PexelsClientError("Rate limit exceeded. Please try again later.")
                 elif response.status_code >= 400:
                     raise PexelsClientError(f"Pexels API error HTTP {response.status_code}: {response.text}")
-                return response.json()
+                return _sanitize_response(response.json())
             except httpx.RequestError as e:
                 raise PexelsClientError(f"HTTP connection failed: {e}")
 
