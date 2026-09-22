@@ -1,4 +1,4 @@
-# ✨ Pexels CLI (`px`)
+# ✨ Pexels AI CLI (`px` / `pexels-cli`)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
@@ -28,26 +28,14 @@ A modern, high-performance command-line tool for [Pexels](https://www.pexels.com
 
 ### Option 1: Install globally via `uv` (Recommended)
 
-If you have `uv` installed, run:
-
 ```bash
-uv tool install git+https://github.com/MIt9/pexels-cli.git
+uv tool install pexels-ai-cli
 ```
 
-This installs the `pexels-cli` and `px` executables globally into your environment.
-
-### Option 2: Clone and Install Locally
+### Option 2: Install via `pip` / `pipx`
 
 ```bash
-git clone https://github.com/MIt9/pexels-cli.git
-cd pexels-cli
-uv tool install .
-```
-
-### Option 3: Install via `pipx` or `pip`
-
-```bash
-pipx install git+https://github.com/MIt9/pexels-cli.git
+pipx install pexels-ai-cli
 ```
 
 ---

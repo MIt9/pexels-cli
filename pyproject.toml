@@ -1,5 +1,5 @@
 [project]
-name = "pexels-cli"
+name = "pexels-ai-cli"
 version = "0.1.0"
 description = "Next-Gen AI-Powered Command Line Interface for Pexels - Built for Humans & AI Agents"
 readme = "README.md"
@@ -24,6 +24,9 @@ dependencies = [
 [project.scripts]
 pexels-cli = "pexels_cli.cli:main"
 px = "pexels_cli.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pexels_cli"]
 
 [build-system]
 requires = ["hatchling"]
