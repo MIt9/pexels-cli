@@ -1,0 +1,30 @@
+[project]
+name = "pexels-cli"
+version = "0.1.0"
+description = "Next-Gen AI-Powered Command Line Interface for Pexels - Built for Humans & AI Agents"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "MIt9" }
+]
+homepage = "https://github.com/MIt9/pexels-cli"
+repository = "https://github.com/MIt9/pexels-cli.git"
+requires-python = ">=3.10"
+dependencies = [
+    "google-genai>=2.24.0",
+    "httpx>=0.28.1",
+    "openai>=3.17.0",
+    "platformdirs>=4.11.12",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
+    "rich>=15.0.0",
+    "typer>=0.27.2",
+]
+
+[project.scripts]
+pexels-cli = "pexels_cli.cli:main"
+px = "pexels_cli.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
