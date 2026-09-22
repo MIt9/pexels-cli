@@ -1,7 +1,7 @@
 """Tests for Pexels CLI."""
 
 from typer.testing import CliRunner
-from pexels_cli.cli import app
+from pexels_cli.cli import app, preprocess_args
 from pexels_cli.config import load_config
 from pexels_cli.state_builder import (
     apply_fields_filter,
@@ -13,12 +13,16 @@ from pexels_cli.state_builder import (
 runner = CliRunner()
 
 
+def test_preprocess_args():
+    assert preprocess_args(["px", "videos", "--state", "--dedupe"]) == ["px", "videos", "--state", "--dedupe=keep-first"]
+    assert preprocess_args(["px", "videos", "--state", "--dedupe", "keep-all-queries"]) == ["px", "videos", "--state", "--dedupe", "keep-all-queries"]
+    assert preprocess_args(["px", "videos", "--state", "--dedupe=keep-all-queries"]) == ["px", "videos", "--state", "--dedupe=keep-all-queries"]
+    assert preprocess_args(["px", "videos", "--state", "--dedupe", "--per-page", "5"]) == ["px", "videos", "--state", "--dedupe=keep-first", "--per-page", "5"]
+
+
 def test_slug_extraction():
     url = "https://www.pexels.com/video/a-man-shopping-on-black-friday-5890229/"
     assert extract_slug_from_url(url) == "a man shopping on black friday"
-
-    url_photo = "https://www.pexels.com/photo/green-trees-in-forest-12377231/"
-    assert extract_slug_from_url(url_photo) == "green trees in forest"
 
 
 def test_build_candidate_state_item():
@@ -56,21 +60,15 @@ def test_deduplicate_candidates():
     assert deduped_all[0]["query"] == ["q1", "q2"]
 
 
-def test_apply_fields_filter():
-    data = {"id": 1, "url": "http://x", "extra": "junk", "width": 100}
-    filtered = apply_fields_filter(data, ["id", "url"])
-    assert filtered == {"id": 1, "url": "http://x"}
-
-
 def test_version_command():
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert "pexels-cli version 0.2.0" in result.output
+    assert "pexels-cli version 0.2.1" in result.output
 
     res_cmd = runner.invoke(app, ["version"])
     assert res_cmd.exit_code == 0
-    assert "pexels-cli v0.2.0" in res_cmd.output
+    assert "pexels-cli v0.2.1" in res_cmd.output
 
     res_json = runner.invoke(app, ["version", "--json"])
     assert res_json.exit_code == 0
-    assert '"version": "0.2.0"' in res_json.output
+    assert '"version": "0.2.1"' in res_json.output

@@ -891,8 +891,31 @@ def curate_cmd(
         raise typer.Exit(code=1)
 
 
+def preprocess_args(args: List[str]) -> List[str]:
+    """Preprocess CLI arguments to expand standalone '--dedupe' flags into '--dedupe=keep-first'."""
+    new_args = []
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "--dedupe":
+            if i + 1 < len(args) and args[i + 1] in ("keep-first", "keep-all-queries"):
+                new_args.append(arg)
+                new_args.append(args[i + 1])
+                i += 2
+                continue
+            else:
+                new_args.append("--dedupe=keep-first")
+                i += 1
+                continue
+        new_args.append(arg)
+        i += 1
+    return new_args
+
+
 def main():
     """CLI Entry point."""
+    import sys
+    sys.argv = preprocess_args(sys.argv)
     app()
 
 
