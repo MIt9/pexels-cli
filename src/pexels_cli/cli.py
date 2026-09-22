@@ -23,10 +23,19 @@ from pexels_cli.ai.smart_search import (
 )
 from pexels_cli.ai.enhancer import enhance_prompt, curate_project
 from pexels_cli.state_builder import (
+    VALID_DEDUPE_MODES,
     apply_fields_filter,
     build_candidate_state_item,
     deduplicate_candidates,
 )
+
+
+def validate_dedupe_mode(dedupe: Optional[str]) -> Optional[str]:
+    if dedupe is not None and dedupe not in VALID_DEDUPE_MODES:
+        raise typer.BadParameter(
+            f"Invalid dedupe mode '{dedupe}'. Choices: {', '.join(VALID_DEDUPE_MODES)}"
+        )
+    return dedupe
 
 
 APP_HELP_TEXT = """
@@ -381,6 +390,7 @@ def search_photos_cmd(
     client = PexelsClient(cfg.pexels_api_key or "")
 
     try:
+        validate_dedupe_mode(dedupe)
         query_list = resolve_query_list(query, queries, queries_file)
         fields_list = [f.strip() for f in fields.split(",") if f.strip()] if fields else []
 
@@ -403,8 +413,7 @@ def search_photos_cmd(
                     all_candidates.append(cand)
 
             if dedupe is not None:
-                dedupe_mode = "keep-all-queries" if dedupe == "keep-all-queries" else "keep-first"
-                all_candidates = deduplicate_candidates(all_candidates, mode=dedupe_mode)
+                all_candidates = deduplicate_candidates(all_candidates, mode=dedupe)
 
             if fields_list:
                 all_candidates = apply_fields_filter(all_candidates, fields_list)
@@ -550,6 +559,7 @@ def search_videos_cmd(
     client = PexelsClient(cfg.pexels_api_key or "")
 
     try:
+        validate_dedupe_mode(dedupe)
         query_list = resolve_query_list(query, queries, queries_file)
         fields_list = [f.strip() for f in fields.split(",") if f.strip()] if fields else []
 
@@ -571,8 +581,7 @@ def search_videos_cmd(
                     all_candidates.append(cand)
 
             if dedupe is not None:
-                dedupe_mode = "keep-all-queries" if dedupe == "keep-all-queries" else "keep-first"
-                all_candidates = deduplicate_candidates(all_candidates, mode=dedupe_mode)
+                all_candidates = deduplicate_candidates(all_candidates, mode=dedupe)
 
             if fields_list:
                 all_candidates = apply_fields_filter(all_candidates, fields_list)
@@ -898,14 +907,14 @@ def preprocess_args(args: List[str]) -> List[str]:
     while i < len(args):
         arg = args[i]
         if arg == "--dedupe":
-            if i + 1 < len(args) and args[i + 1] in ("keep-first", "keep-all-queries"):
+            if i + 1 >= len(args) or args[i + 1].startswith("-"):
+                new_args.append("--dedupe=keep-first")
+                i += 1
+                continue
+            else:
                 new_args.append(arg)
                 new_args.append(args[i + 1])
                 i += 2
-                continue
-            else:
-                new_args.append("--dedupe=keep-first")
-                i += 1
                 continue
         new_args.append(arg)
         i += 1

@@ -63,15 +63,15 @@ def test_deduplicate_candidates():
 def test_version_command():
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert "pexels-cli version 0.2.2" in result.output
+    assert "pexels-cli version 0.2.3" in result.output
 
     res_cmd = runner.invoke(app, ["version"])
     assert res_cmd.exit_code == 0
-    assert "pexels-cli v0.2.2" in res_cmd.output
+    assert "pexels-cli v0.2.3" in res_cmd.output
 
     res_json = runner.invoke(app, ["version", "--json"])
     assert res_json.exit_code == 0
-    assert '"version": "0.2.2"' in res_json.output
+    assert '"version": "0.2.3"' in res_json.output
 
 
 def test_sanitize_response():
@@ -89,4 +89,20 @@ def test_sanitize_response():
     assert sanitized["next_page"] == "https://api.pexels.com/v1/search?page=2&per_page=15"
     assert sanitized["prev_page"] == "https://api.pexels.com/v1/search?page=1&per_page=15"
     assert sanitized["nested"]["next_page"] == "https://api.pexels.com/v1/photos"
+
+
+def test_invalid_dedupe_validation():
+    result = runner.invoke(app, ["search", "mountains", "--dedupe", "invalid-mode"])
+    assert result.exit_code != 0
+    assert "Invalid dedupe mode 'invalid-mode'" in result.output
+
+
+def test_fields_filter_warning(capsys):
+    data = [{"id": 1, "url": "https://pexels.com/1"}]
+    filtered = apply_fields_filter(data, ["id", "non_existent_field"])
+    assert filtered == [{"id": 1}]
+    captured = capsys.readouterr()
+    assert "Warning" in captured.err
+    assert "non_existent_field" in captured.err
+
 

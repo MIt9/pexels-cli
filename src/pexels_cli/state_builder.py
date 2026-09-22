@@ -107,6 +107,9 @@ def build_candidate_state_item(
     return candidate
 
 
+VALID_DEDUPE_MODES = ("keep-first", "keep-all-queries")
+
+
 def deduplicate_candidates(
     candidates: List[Dict[str, Any]],
     mode: str = "keep-first",
@@ -117,6 +120,9 @@ def deduplicate_candidates(
     - 'keep-first' / True: keeps first candidate, query remains single string or initial array.
     - 'keep-all-queries': keeps first candidate, but merges query into a list of all matching queries.
     """
+    if mode not in VALID_DEDUPE_MODES:
+        raise ValueError(f"Invalid dedupe mode '{mode}'. Choices: {', '.join(VALID_DEDUPE_MODES)}")
+
     seen: Dict[Any, Dict[str, Any]] = {}
     result: List[Dict[str, Any]] = []
 
@@ -155,11 +161,42 @@ def deduplicate_candidates(
 
 
 def apply_fields_filter(data: Any, fields: List[str]) -> Any:
-    """Filter dictionary/list keys to contain only specified fields."""
+    """Filter dictionary/list keys to contain only specified fields.
+    Prints a warning to stderr if requested fields are not present in the data.
+    """
     if not fields:
         return data
 
     field_set = set(fields)
+
+    # Collect existing keys to detect non-existent fields
+    existing_keys = set()
+    has_items = False
+    if isinstance(data, dict):
+        existing_keys.update(data.keys())
+        items = data.get("photos") or data.get("videos")
+        if isinstance(items, list) and len(items) > 0:
+            has_items = True
+            for item in items:
+                if isinstance(item, dict):
+                    existing_keys.update(item.keys())
+    elif isinstance(data, list) and len(data) > 0:
+        has_items = True
+        for item in data:
+            if isinstance(item, dict):
+                existing_keys.update(item.keys())
+
+    if existing_keys and (has_items or (isinstance(data, dict) and not ("photos" in data or "videos" in data))):
+        missing_fields = [f for f in fields if f not in existing_keys]
+        if missing_fields:
+            import sys
+            from rich.console import Console
+
+            stderr_console = Console(stderr=True)
+            missing_str = ", ".join(f"'{f}'" for f in missing_fields)
+            stderr_console.print(
+                f"[yellow]⚠️ Warning:[/yellow] Field(s) {missing_str} not found in response objects."
+            )
 
     def _filter_dict(d: Dict[str, Any]) -> Dict[str, Any]:
         return {k: v for k, v in d.items() if k in field_set}
