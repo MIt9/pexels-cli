@@ -6,6 +6,7 @@ from typing import Optional
 import typer
 from rich.console import Console
 
+from pexels_cli._version import __version__
 from pexels_cli.config import (
     AIProvider,
     Config,
@@ -113,6 +114,52 @@ ai_app = typer.Typer(
 app.add_typer(ai_app, name="ai")
 
 console = Console()
+
+
+def version_callback(value: bool):
+    """Callback for --version / -v flag."""
+    if value:
+        console.print(f"✨ [bold cyan]pexels-cli[/bold cyan] version [bold green]{__version__}[/bold green]")
+        raise typer.Exit()
+
+
+@app.callback()
+def main_callback(
+    version: Optional[bool] = typer.Option(
+        None,
+        "--version",
+        "-v",
+        help="Show package version and exit.",
+        callback=version_callback,
+        is_eager=True,
+    ),
+):
+    """Root callback for global flags."""
+    pass
+
+
+@app.command("version")
+def version_cmd(
+    json_output: bool = typer.Option(False, "--json", help="Output version info as JSON"),
+):
+    """
+    ℹ️ **Display detailed version and environment information.**
+    """
+    import sys
+    cfg = load_config()
+    fmt = get_formatter(json_output)
+    info = {
+        "name": "pexels-cli",
+        "version": __version__,
+        "python_version": sys.version.split()[0],
+        "default_output": cfg.default_output,
+        "ai_provider": cfg.ai_provider,
+    }
+    if fmt.json_mode:
+        fmt.print_data(info)
+    else:
+        console.print(f"✨ [bold cyan]pexels-cli[/bold cyan] v[bold green]{__version__}[/bold green] (Python {info['python_version']})")
+
 
 
 def get_formatter(json_flag: bool) -> OutputFormatter:

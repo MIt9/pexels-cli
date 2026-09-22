@@ -26,3 +26,17 @@ def test_help_command():
     assert "Pexels CLI" in result.output
     assert "smart-photo" in result.output
     assert "smart-video" in result.output
+
+
+def test_version_command():
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert "pexels-cli version 0.1.0" in result.output
+
+    res_cmd = runner.invoke(app, ["version"])
+    assert res_cmd.exit_code == 0
+    assert "pexels-cli v0.1.0" in res_cmd.output
+
+    res_json = runner.invoke(app, ["version", "--json"])
+    assert res_json.exit_code == 0
+    assert '"version": "0.1.0"' in res_json.output
