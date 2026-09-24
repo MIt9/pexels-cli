@@ -1,7 +1,7 @@
 [project]
-name = "pexels-ai-cli"
-version = "0.2.4"
-description = "Next-Gen AI-Powered Command Line Interface for Pexels - Built for Humans & AI Agents"
+name = "pexels-cli"
+version = "0.2.5"
+description = "CLI for Pexels API — search, download and batch-fetch stock photos and videos from the terminal"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
